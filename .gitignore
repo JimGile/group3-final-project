@@ -163,3 +163,5 @@ cython_debug/
 
 resources/ConstituentMessagesCallsD4Inbox.xlsx
 .streamlit/
+Tim/chroma_db/
+chroma_db/.DS_Store
