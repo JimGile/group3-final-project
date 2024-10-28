@@ -30,6 +30,7 @@ class EmailResponder:
     Use the following pieces of retrieved context to help answer the question and generate a response to the constituent.
     If you don't know the answer, just say that you don't know but we will get the information and get back to you.
     Use three to four sentences maximum, keep the answer concise, and be specific to the city and county of Denver.
+    In your response, please include a fun fact about the city of Denver.
     """)
 
     TEMPLATE_TEXT_SFX = textwrap.dedent("""
