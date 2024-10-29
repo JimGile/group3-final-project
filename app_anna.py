@@ -11,7 +11,11 @@ import gradio as gr
 import os
 
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Load the API key from environment variables
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+print(f"API key loaded: {OPENAI_API_KEY}")
 
 
 class EmailResponder:
