@@ -2,7 +2,7 @@
 # Email Responder for Denver City Council District 4
 
 ## Overview
-This application is an AI-powered email responder designed to assist Denver City Council District 4 in managing constituent communications. It leverages the LangChain framework and OpenAI's language models to generate context-specific responses, additional resources about the issue, and details on next steps for resolution, and a feedback loop to improve answers over time; helping streamline responses to community inquiries quickly and efficiently.
+This application is an AI-powered email responder designed to assist Denver City Council District 4 in managing constituent communications. It leverages the LangChain framework and OpenAI's language models to generate context-specific responses, additional resources about the issue, details on next steps for resolution, and a feedback loop to improve answers over time; helping streamline responses to community inquiries quickly and efficiently.
 
 ## Features
 - **Automated Email Responses**: Uses AI to generate concise, context-specific responses to constituent emails.
