@@ -8,20 +8,15 @@ from langchain.chat_models import ChatOpenAI
 from langchain.chains import LLMChain, SequentialChain
 from langchain.prompts import PromptTemplate
 from chroma_db import D4EmailChromaDb
-from bs4 import BeautifulSoup
 import textwrap
 import gradio as gr
 import os
-import requests
-
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 class EmailResponder:
-
-    URL = "https://www.denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Denver-City-Council/Council-Members-Websites-Info/District-4"
 
     RAG_TEMPLATE_TEXT_GENERIC = textwrap.dedent("""
     You are an assistant for question-answering tasks.
@@ -220,52 +215,6 @@ class EmailResponder:
         )
         return rag_chain
 
-    def fetch_and_display_summaries_with_links(self, topics: str):
-        url = self.URL
-        keywords = [topic.strip() for topic in topics.split(',')]
-        try:
-            # Fetch and parse the page content
-            response = requests.get(url)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Find relevant sections and generate summaries
-            relevant_articles = {}
-            for keyword in keywords:
-                relevant_articles[keyword] = []
-                for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'a']):
-                    if keyword.lower() in element.get_text(strip=True).lower():
-                        # Capture the parent section for full context
-                        section = element.find_parent()
-                        full_text = section.get_text(strip=True, separator="\n") if section else element.get_text(strip=True)
-                        
-                        # Generate a short summary (first 1-2 sentences)
-                        summary = '. '.join(full_text.split('. ')[:2]) + '...'
-                        
-                        # Add link if it's a URL element
-                        link = url if not element.name == 'a' else element.get('href', url)
-                        
-                        # Avoid duplicates
-                        if summary not in [item['summary'] for item in relevant_articles[keyword]]:
-                            relevant_articles[keyword].append({'summary': summary, 'link': link})
-            
-            # Format the output with summaries and links
-            display_output = "### Summaries with Links to Full Articles:\n\n"
-            for keyword, articles in relevant_articles.items():
-                display_output += f"**Keyword: {keyword.capitalize()}**\n\n"
-                for i, article in enumerate(articles, 1):
-                    display_output += f"{i}. {article['summary']} "
-                    display_output += f"[Read More]({article['link']})\n\n"
-                    display_output += "---\n"  # Separator between summaries
-                
-                if not articles:
-                    display_output += f"No articles found for **{keyword}**.\n\n"
-
-            return display_output
-
-        except requests.RequestException as e:
-            return f"An error occurred: {e}"
-    
     def generate_response(
             self,
             email,
@@ -296,9 +245,8 @@ class EmailResponder:
         results = self.topic_and_fun_fact_chain(email)
         topics = results["topics"]
         fun_fact = results["fun_fact"]
-        html_summary = self.fetch_and_display_summaries_with_links(topics)
 
-        return (sentiment, topics, response, fun_fact, html_summary)
+        return (sentiment, topics, response, fun_fact)
 
     # Define a function to format the documents retrieved from the vector store
     def _format_docs(self, docs):
@@ -306,19 +254,15 @@ class EmailResponder:
 
 
 # Define the gradio interface
-def create_gradio_app(responder: EmailResponder) -> gr.Interface:
+def create_gradio_app(responder: EmailResponder) -> gr.Blocks:
     """
     Create a Gradio interface that wraps the given EmailResponder object.
-
-    This interface has a single text box input for the constituent email
-    and a single text box output for the generated response.
-    The interface also includes a title, description, and examples.
 
     Args:
         responder: The EmailResponder object to wrap.
 
     Returns:
-        A Gradio Interface object that can be launched with app.launch()
+        A Gradio Blocks object that can be launched with app.launch()
     """
 
     example_emails = [
@@ -340,59 +284,90 @@ def create_gradio_app(responder: EmailResponder) -> gr.Interface:
         [example_emails[2], "D4 Specific Prompt", "gpt-4o-mini", 0.6],
     ]
 
-    email_app = gr.Interface(
-        responder.generate_response,
-        [
-            gr.Textbox(
-                label="Constituent Email",
-                placeholder="Enter email here..."
-            ),
-            gr.Dropdown(
-                choices=responder.rag_prompt_text_choices,
-                value=responder.current_rag_prompt_text_choice,
-                label="Prompt Template",
-            ),
-            gr.Dropdown(
-                choices=responder.gpt_model_choices,
-                value=responder.current_gpt_model_choice,
-                label="GPT Model",
-            ),
-            gr.Slider(
-                value=responder.current_gpt_model_temp,
-                label="D4 Specificity Scale - 0 is most specific, 1 is least specific",
-                minimum=0,
-                maximum=1,
-                step=0.1
-            ),
-        ],
-        [
-            gr.Textbox(
-                label="Sentiment:",
-                placeholder="The sentiment of the email will show here..."
-            ),
-            gr.Textbox(
-                label="Topics:",
-                placeholder="Email topics will show here..."
-            ),
-            gr.Textbox(
-                label="Sample response:",
-                placeholder="Generated response will show here..."
-            ),
-            gr.Textbox(
-                label="Denver Fun Fact:",
-                placeholder="Random Denver fun fact will show here..."
-            ),
-            gr.Textbox(
-                label="Additional Info",
-                placeholder="Additional Denvergov.org info"
-            ),
-        ],
-        title="Denver City Council District 4 Email Assistant",
-        description="Enter a constituent email and the app will generate a sample response.",
-        examples=examples,
-        cache_examples=False
-    )
+    def handle_thumbs_up(sentiment, topics, response):
+        return f"Positive feedback received for: {response}"
+
+    def handle_thumbs_down(sentiment, topics, response):
+        return f"Negative feedback received for: {response}"
+
+    with gr.Blocks() as email_app:
+        gr.Markdown("# Denver City Council District 4 Email Assistant")
+        gr.Markdown("Enter a constituent email and the app will generate a sample response.")
+        
+        # Define input components
+        email_input = gr.Textbox(
+            label="Constituent Email",
+            placeholder="Enter email here..."
+        )
+        prompt_template = gr.Dropdown(
+            choices=responder.rag_prompt_text_choices,
+            value=responder.current_rag_prompt_text_choice,
+            label="Prompt Template",
+        )
+        gpt_model = gr.Dropdown(
+            choices=responder.gpt_model_choices,
+            value=responder.current_gpt_model_choice,
+            label="GPT Model",
+        )
+        specificity_scale = gr.Slider(
+            value=responder.current_gpt_model_temp,
+            label="D4 Specificity Scale - 0 is most specific, 1 is least specific",
+            minimum=0,
+            maximum=1,
+            step=0.1
+        )
+
+        # Button to generate response
+        generate_button = gr.Button("Generate Response")
+
+        # Define output components
+        sentiment_output = gr.Textbox(
+            label="Sentiment:",
+            placeholder="The sentiment of the email will show here..."
+        )
+        topics_output = gr.Textbox(
+            label="Topics:",
+            placeholder="Email topics will show here..."
+        )
+        response_output = gr.Textbox(
+            label="Sample response:",
+            placeholder="Generated response will show here..."
+        )
+        fun_fact_output = gr.Textbox(
+            label="Denver Fun Fact:",
+            placeholder="Random Denver fun fact will show here..."
+        )
+        feedback_output = gr.Textbox(
+            label="Feedback:",
+            placeholder="Feedback on the response will show here..."
+        )
+
+        # Thumbs up and thumbs down buttons
+        with gr.Row():
+            thumbs_up = gr.Button("👍 Thumbs Up")
+            thumbs_down = gr.Button("👎 Thumbs Down")
+
+        # Connect generate button to responder function
+        generate_button.click(
+            fn=responder.generate_response,
+            inputs=[email_input, prompt_template, gpt_model, specificity_scale],
+            outputs=[sentiment_output, topics_output, response_output, fun_fact_output]
+        )
+
+        # Connect thumbs up and thumbs down buttons to feedback functions
+        thumbs_up.click(
+            fn=handle_thumbs_up,
+            inputs=[sentiment_output, topics_output, response_output],
+            outputs=feedback_output
+        )
+        thumbs_down.click(
+            fn=handle_thumbs_down,
+            inputs=[sentiment_output, topics_output, response_output],
+            outputs=feedback_output
+        )
+
     return email_app
+
 
 
 # Run the application
