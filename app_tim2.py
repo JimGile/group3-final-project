@@ -368,23 +368,25 @@ def create_gradio_app(responder: EmailResponder) -> gr.Interface:
         [
             gr.Textbox(
                 label="Sentiment:",
-                placeholder="The sentiment of the email will show here..."
+                placeholder="The sentiment of the email will show here...",
+                max_lines=1
             ),
             gr.Textbox(
                 label="Topics:",
-                placeholder="Email topics will show here..."
+                placeholder="Email topics will show here...",
+                max_lines=1
             ),
             gr.Textbox(
                 label="Sample response:",
-                placeholder="Generated response will show here..."
+                placeholder="Generated response will show here...",
             ),
             gr.Textbox(
                 label="Denver Fun Fact:",
-                placeholder="Random Denver fun fact will show here..."
+                placeholder="Random Denver fun fact will show here...",
             ),
             gr.Textbox(
                 label="Additional Info",
-                placeholder="Additional Denvergov.org info"
+                placeholder="Additional Denvergov.org info",
             ),
         ],
         title="Denver City Council District 4 Email Assistant",
