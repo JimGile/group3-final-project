@@ -8,17 +8,20 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.vectorstores.base import VectorStoreRetriever
 #from langchain.chat_models import ChatOpenAI
 from langchain_community.chat_models import ChatOpenAI
-from chroma_db import D4EmailChromaDb
-from dotenv import load_dotenv
 import textwrap
 import gradio as gr
 import os
+import requests
+import json
+import tf_keras as keras
+from transformers import pipeline
+from bs4 import BeautifulSoup
 
-# Load environment variables from .env file
-load_dotenv()
+import sys
+sys.path.append('chroma_db')
+from chroma_db import D4EmailChromaDb
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
 
 
 class EmailResponder:
@@ -66,8 +69,27 @@ class EmailResponder:
         self.prompt = self.create_generic_prompt()
         self.update_prompt_text(self.current_prompt_text_choice)
         self.llm = self.create_gpt_llm(self.current_gpt_model_choice, self.current_gpt_model_temp)
-        self.rag_chain = self.create_rag_cahin()
+        self.rag_chain = self.create_rag_chain()
 
+    def classify_email_with_gpt_via_http(self, email_text):
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are an assistant that classifies emails based on two criteria: 1) category and 2) sentiment. The category options are: Encampment Reporting, Graffiti, Pothole, Animal Complaint, Weeds & Vegetation, Neighborhood Issue, Other, Snow on Sidewalk, Abandoned Vehicle, Illegal Parking, Damaged/Fallen Tree, Police: Non-emergency, Fireworks, Illegal Dumping, Shared Micromobility, No Heat No Water No Electricity, Missed Trash Pickup. The sentiment options are: Positive, Neutral, and Negative."},
+                {"role": "user", "content": email_text}
+            ],
+            "max_tokens": 50,
+            "temperature": 0.0
+        }
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        response_json = response.json()
+        return response_json['choices'][0]['message']['content'].strip()
+    
     def create_retriever(self) -> VectorStoreRetriever:
         """
         Create a retriever that uses cosine similarity to search the vector store.
@@ -117,7 +139,7 @@ class EmailResponder:
         """
         return ChatOpenAI(model=model_name, temperature=temperature)
 
-    def create_rag_cahin(self):
+    def create_rag_chain(self):
         # Define the chain
         rag_chain = (
             {
@@ -130,7 +152,7 @@ class EmailResponder:
         )
         return rag_chain
 
-    def generate_response(self, email, prompt_template_choice: str, gpt_model_choce: str, gpt_model_temp: float):
+    def generate_response(self, email, prompt_template_choice: str, gpt_model_choice: str, gpt_model_temp: float):
         """
         Generate a response to the given email.
 
@@ -143,14 +165,13 @@ class EmailResponder:
         if prompt_template_choice != self.current_prompt_text_choice:
             self.current_prompt_text_choice = prompt_template_choice
             self.update_prompt_text(prompt_template_choice)
-        if gpt_model_choce != self.current_gpt_model_choice or gpt_model_temp != self.current_gpt_model_temp:
-            self.current_gpt_model_choice = gpt_model_choce
+        if gpt_model_choice != self.current_gpt_model_choice or gpt_model_temp != self.current_gpt_model_temp:
+            self.current_gpt_model_choice = gpt_model_choice
             self.current_gpt_model_temp = gpt_model_temp
-            self.llm = self.create_gpt_llm(model_name=gpt_model_choce, temperature=gpt_model_temp)
+            self.llm = self.create_gpt_llm(model_name=gpt_model_choice, temperature=gpt_model_temp)
 
         return self.rag_chain.invoke(email)
-
-    # Define a function to format the documents retrieved from the vector store
+        # Define a function to format the documents retrieved from the vector store
     def _format_docs(self, docs):
         return "\n\n".join(doc.page_content for doc in docs)
 
@@ -188,36 +209,21 @@ def create_gradio_app(responder: EmailResponder) -> gr.Interface:
         [example_emails[1], "Generic Prompt", "gpt-4o-mini", 0.3],
     ]    
 
+
+    # Define Gradio Interface
     email_app = gr.Interface(
-        responder.generate_response,
-        [
-            gr.Textbox(
-                label="Constituent Email",
-                placeholder="Enter email here..."
-            ),
-            gr.Dropdown(
-                choices=responder.prompt_text_choices,
-                value=responder.current_prompt_text_choice,
-                label="Prompt Template",
-            ),
-            gr.Dropdown(
-                choices=responder.gpt_model_choices,
-                value=responder.current_gpt_model_choice,
-                label="GPT Model",
-            ),
-            gr.Slider(
-                value=responder.current_gpt_model_temp,
-                label="D4 Specificity Scale - 0 is most specific, 1 is least specific",
-                minimum=0,
-                maximum=1,
-                step=0.1
-            ),
+        fn=lambda email, prompt, model, temp, classify: (
+            responder.classify_email_with_gpt_via_http(email) if classify else responder.generate_response(email, prompt, model, temp)
+        ),
+        inputs=[
+            gr.Textbox(label="Constituent Email", placeholder="Enter email here..."),
+            gr.Dropdown(choices=responder.prompt_text_choices, value=responder.current_prompt_text_choice, label="Prompt Template"),
+            gr.Dropdown(choices=responder.gpt_model_choices, value=responder.current_gpt_model_choice, label="GPT Model"),
+            gr.Slider(value=responder.current_gpt_model_temp, label="Specificity Scale", minimum=0, maximum=1, step=0.1),
         ],
-        [
-            gr.Textbox(
-                label="Sample response:",
-                placeholder="Generated response will show here..."
-            ),
+        outputs=[
+            gr.Textbox(label="Sample Response", placeholder="Generated response will show here..."),
+            gr.Textbox(label="Topic", value="Topic Returned"),
         ],
         title="Denver City Council District 4 Email Assistant",
         description="Enter a constituent email and the app will generate a sample response.",
