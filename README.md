@@ -34,7 +34,7 @@ This application is an AI-powered email responder designed to assist Denver City
     python app.py
 
 ## Team Members
-Anna Fine
-Carl Peterson
-Jim Gile
-Tim Willard
+- Anna Fine
+- Carl Peterson
+- Jim Gile
+- Tim Willard
