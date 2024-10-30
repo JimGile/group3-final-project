@@ -1,3 +1,5 @@
+from bs4 import BeautifulSoup
+from chroma_db import D4EmailChromaDb
 from langchain import hub
 from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
@@ -7,7 +9,8 @@ from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import LLMChain, SequentialChain
 from langchain.prompts import PromptTemplate
-from chroma_db import D4EmailChromaDb
+
+import requests
 import textwrap
 import gradio as gr
 import os
@@ -17,6 +20,79 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 class EmailResponder:
+
+    D4_URL = "https://www.denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Denver-City-Council/Council-Members-Websites-Info/District-4"
+
+    TOPICS_TO_311_DICT = {
+        "Homeless": {
+            'link': "Encampment Reporting: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Are there any children present? How long has the encampment been there? How many tents/structures are present? Are needles, feces or trash present?",
+        },
+        "Graffiti": {
+            'link': "Graffiti: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Is the property public, a park, private, or RTD property? Where is the graffiti located? Is graffiti higher than the first floor? Are you the owner or tenant of this property? Is graffiti profane or racist? What is tagged? Is there any identifying features? And if it's on RTD property, please provide as much of the following as possible: the 5 digit bus stop number, the route number, bench number, and direction of travel for the bus.",
+        },
+        "Pothole": {
+            'link': "Pothole: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Is the pothole located in an alley, gutter or street? What is the pothole surface? What is the direction of travel of the side it's located on, North, South, East, West, or in an alley? What lane? Can you see the bottom? You'll also need to describe, specifically, the level of damage.",
+        },
+        "Animal": {
+            'link': "Animal Complaint: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "For this complaint, you just need to describe the issue with as much detail as you can provide. Picture evidence will also strengthen your case.",
+        },
+        "Vegetation": {
+            'link': "Weeds and Vegetation: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Where on property is the violation? Is the violation outdoor storage, trash, vegetation, or something else?",
+        },
+        "Neighborhood": {
+            'link': "Neighborhood Issue: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "For this complaint, you just need to describe the issue with as much detail as you can provide. Picture evidence will also strengthen your case.",
+        },
+        "Other": {
+            'link': "Other: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "For this complaint, you just need to describe the issue with as much detail as you can provide. Picture evidence will also strengthen your case.",
+        },
+        "Snow Removal": {
+            'link': "Snow on Sidewalk: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Is the property business or residential?",
+        },
+        "Vehicle": {
+            'link': "Abandoned Vehicle: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Is the property public or private? What is the exact location of the vehicle? What is the plate number? What state is the plate from?",
+        },
+        "Parking": {
+            'link': "Illegal Parking: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Is the vehicle blocking a driveway? How long has vehicle been parked? What is the plate number? What state is the plate from? What is the color, make, and style of vehicle? What type of vehicle is it?",
+        },
+        "Police": {
+            'link': "Police (Non-Emergency): https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: You will need to confirm that this is, in fact, a non-emergency before proceeding to describe the issue with as much detail as you can provide. Picture evidence will also strengthen your case.",
+        },
+        "Fireworks": {
+            'link': "Fireworks: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: What was the date of the occurence? At what time did this happen? What did you see or hear?",
+        },
+        "Dumping": {
+            'link': "Illegal Dumping: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: What is the color, make, and style of vehicle? What is the plate number? What state is the plate from? At what time did this happen? What type of items are being dumped? Describe the person doing the disposal.",
+        },
+        "Trash": {
+            'link': "Missed Trash Pickup: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Did you receive a notice on your cart? What time were your carts/large items set out? Are your carts/large items out and accessible right now? Was there anything blocking access to the cart/items? What service was not collected?",
+        },
+        "Tree": {
+            'link': "Damaged/Fallen Tree: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: What size is the branch? Where is it located exactly? Is tree blocking street access or right of way? And if a street sign is blocked, is it partial or total obstruction?",
+        },
+        "Micromobility": {
+            'link': "Shared Micromobility: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: What is the scooter/bike ID number (and/or color)? Is the scooter/bike laying on the ground (not standing)? Is the scooter/bike allowing 5ft of pedestrian clearance? Is the scooter/bike allowing 4ft of utilities clearance? Is the scooter/bike parked within 1.5ft of the curb or building? Is the scooter/bike blocking sight triangle near an intersection/alley/driveway? Is the scooter/bike damaged? If so describe the damage.",
+        },
+        "Utilities": {
+            'link': "No Heat No Water No Electricity: https://denvergov.org/Online-Services-Hub/Report-an-Issue/issue/description",
+            'response': "You will need to report the issue through 311. To do this you'll need to answer the following questions: Has management/landlord/property manager been notified? Is this a home, apartment, condo, townhouse, motel or hotel? Are you the owner, tenant or other? What is the unit or room number? Please disclose if you have any pets or weapons in the home, they will need to be secured if an investigation is scheduled.",
+        },
+    }
 
     RAG_TEMPLATE_TEXT_GENERIC = textwrap.dedent("""
     You are an assistant for question-answering tasks.
@@ -32,6 +108,10 @@ class EmailResponder:
     Use the following pieces of retrieved context to help answer the question and generate a response to the constituent.
     If you don't know the answer, just say that you don't know but we will get the information and get back to you.
     Use three to four sentences maximum, keep the answer concise, and be specific to the city and county of Denver.
+
+    Please concluder your response with the following format:
+    Thank you,
+    Office of Councilwoman Diana Romero Campbell, District 4.
     """)
 
     RAG_TEMPLATE_TEXT_SFX = textwrap.dedent("""
@@ -52,7 +132,7 @@ class EmailResponder:
         'Graffiti': 'words similar to graffiti, paint, tagging',
         'Pothole': 'words similar to pothole, holes',
         'Animal': 'words similar to animal, pest, pets, barking',
-        'Vegitation': 'words similar to weeds, trees, limbs, overgrown',
+        'Vegetation': 'words similar to weeds, trees, limbs, overgrown',
         'Neighborhood': 'words similar to HOA, RNO, sidewalk, fence',
         'Snow Removal': 'words similar to snow, ice, plows',
         'Vehicle': 'words similar to vehicle, car, motorcycle, automobile',
@@ -109,8 +189,10 @@ class EmailResponder:
             embedding_function=self.embedding_function,
             persist_directory=self.persist_directory,
         )
-        self.rag_prompt_text_choices: list[str] = ["D4 Specific Prompt", "Generic Prompt",]
-        self.gpt_model_choices: list[str] = ["gpt-4o-mini", "gpt-3.5-turbo", "gpt-4"]
+        self.rag_prompt_text_choices: list[str] = [
+            "D4 Specific Prompt", "Generic Prompt",]
+        self.gpt_model_choices: list[str] = [
+            "gpt-4o-mini", "gpt-3.5-turbo", "gpt-4"]
         self.current_rag_prompt_text_choice: str = self.rag_prompt_text_choices[0]
         self.current_gpt_model_choice: str = self.gpt_model_choices[0]
         self.current_gpt_model_temp: float = 1
@@ -215,6 +297,64 @@ class EmailResponder:
         )
         return rag_chain
 
+    def get_topic_311_details(self, topics):
+        topic_311_details = []
+        for keyword, details_dict in self.TOPICS_TO_311_DICT.items():
+            if keyword in topics:
+                topic_311_details.append(textwrap.dedent(
+                    f"""Topic: {keyword}\nLink: {details_dict['link']}\nDetails: {details_dict['response']}
+
+                    """
+                ))
+        return "".join(topic_311_details).rstrip()
+
+    def get_html_summaries(self, topics: str):
+        url = self.D4_URL
+        keywords = [topic.strip() for topic in topics.split(',')]
+        try:
+            # Fetch and parse the page content
+            response = requests.get(url)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Find relevant sections and generate summaries
+            relevant_articles = {}
+            for keyword in keywords:
+                relevant_articles[keyword] = []
+                for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'a']):
+                    if keyword.lower() in element.get_text(strip=True).lower():
+                        # Capture the parent section for full context
+                        section = element.find_parent()
+                        full_text = section.get_text(
+                            strip=True, separator="\n") if section else element.get_text(strip=True)
+
+                        # Generate a short summary (first 1-2 sentences)
+                        summary = '. '.join(full_text.split('. ')[:2]) + '...'
+
+                        # Add link if it's a URL element
+                        link = url if element.name != 'a' else element.get('href', url)
+
+                        # Avoid duplicates
+                        if summary not in [item['summary'] for item in relevant_articles[keyword]]:
+                            relevant_articles[keyword].append({'summary': summary, 'link': link})
+
+            # Format the output with summaries and links
+            display_output = "### Summaries with Links to Full Articles:\n\n"
+            for keyword, articles in relevant_articles.items():
+                display_output += f"**Keyword: {keyword.capitalize()}**\n\n"
+                for i, article in enumerate(articles, 1):
+                    display_output += f"{i}. {article['summary']} "
+                    display_output += f"[Read More]({article['link']})\n\n"
+                    display_output += "---\n"  # Separator between summaries
+
+                if not articles:
+                    display_output += f"No articles found for **{keyword}**.\n\n"
+
+            return display_output
+
+        except requests.RequestException as e:
+            return f"An error occurred: {e}"
+
     def generate_response(
             self,
             email,
@@ -244,9 +384,11 @@ class EmailResponder:
         sentiment = self.sentiment_chain.invoke(email)
         results = self.topic_and_fun_fact_chain(email)
         topics = results["topics"]
+        topic_details = self.get_topic_311_details(topics)
         fun_fact = results["fun_fact"]
+        html_summary = self.get_html_summaries(topics)
 
-        return (sentiment, topics, response, fun_fact)
+        return (sentiment, topics, response, topic_details, fun_fact, html_summary)
 
     # Define a function to format the documents retrieved from the vector store
     def _format_docs(self, docs):
@@ -254,88 +396,142 @@ class EmailResponder:
 
 
 # Define the gradio interface
-def create_gradio_app(responder: EmailResponder) -> gr.Interface:
+def create_gradio_app(responder: EmailResponder) -> gr.Blocks:
     """
     Create a Gradio interface that wraps the given EmailResponder object.
-
-    This interface has a single text box input for the constituent email
-    and a single text box output for the generated response.
-    The interface also includes a title, description, and examples.
 
     Args:
         responder: The EmailResponder object to wrap.
 
     Returns:
-        A Gradio Interface object that can be launched with app.launch()
+        A Gradio Blocks object that can be launched with app.launch()
     """
 
     example_emails = [
         textwrap.dedent("""
-            The lack of police presence and code enforcement is sending a growing message that these violations
-            are not important. Second item: affordable denver and wanting more information about how the tax will
-            accomplish the goals set by Mayor.
-        """),
+        The lack of police presence and code enforcement is sending a growing message that these violations
+        are not important. Second item: affordable denver and wanting more information about how the tax will
+        accomplish the goals set by Mayor.
+        """).strip(),
         "I want information on getting a compost bin. I have submitted case number: 9578014",
         "I saw a downed tree at the intersection of Yale and Clayton. One of the limbs is blocking the street."
     ]
 
     # Define examples with all inputs specified for each example
     examples = [
-        [example_emails[0], "D4 Specific Prompt", "gpt-4o-mini", 0.3],
+        [example_emails[0], "D4 Specific Prompt", "gpt-4o-mini", 0.1],
         [example_emails[0], "Generic Prompt", "gpt-4o-mini", 1.0],
         [example_emails[1], "D4 Specific Prompt", "gpt-4o-mini", 1.0],
         [example_emails[1], "Generic Prompt", "gpt-4o-mini", 0.3],
         [example_emails[2], "D4 Specific Prompt", "gpt-4o-mini", 0.6],
     ]
 
-    email_app = gr.Interface(
-        responder.generate_response,
-        [
-            gr.Textbox(
-                label="Constituent Email",
-                placeholder="Enter email here..."
-            ),
-            gr.Dropdown(
-                choices=responder.rag_prompt_text_choices,
-                value=responder.current_rag_prompt_text_choice,
-                label="Prompt Template",
-            ),
-            gr.Dropdown(
-                choices=responder.gpt_model_choices,
-                value=responder.current_gpt_model_choice,
-                label="GPT Model",
-            ),
-            gr.Slider(
-                value=responder.current_gpt_model_temp,
-                label="D4 Specificity Scale - 0 is most specific, 1 is least specific",
-                minimum=0,
-                maximum=1,
-                step=0.1
-            ),
-        ],
-        [
-            gr.Textbox(
-                label="Sentiment:",
-                placeholder="The sentiment of the email will show here..."
-            ),
-            gr.Textbox(
-                label="Topics:",
-                placeholder="Email topics will show here..."
-            ),
-            gr.Textbox(
-                label="Sample response:",
-                placeholder="Generated response will show here..."
-            ),
-            gr.Textbox(
-                label="Denver Fun Fact:",
-                placeholder="Random Denver fun fact will show here..."
-            ),
-        ],
-        title="Denver City Council District 4 Email Assistant",
-        description="Enter a constituent email and the app will generate a sample response.",
-        examples=examples,
-        cache_examples=False
-    )
+    def handle_thumbs_up(sentiment, topics, response):
+        return f"Positive feedback received for:\n{response}"
+
+    def handle_thumbs_down(sentiment, topics, response):
+        return f"Negative feedback received for:\n{response}"
+
+    with gr.Blocks() as email_app:
+        gr.Markdown("# Denver City Council District 4 Email Assistant")
+        gr.Markdown(
+            "Enter a constituent email and the app will generate a sample response.")
+
+        with gr.Row():
+            with gr.Column():
+                # Define input components for Column 1
+                email_input = gr.Textbox(
+                    label="Constituent Email",
+                    placeholder="Enter email here..."
+                )
+                prompt_template = gr.Dropdown(
+                    choices=responder.rag_prompt_text_choices,
+                    value=responder.current_rag_prompt_text_choice,
+                    label="Prompt Template",
+                )
+                gpt_model = gr.Dropdown(
+                    choices=responder.gpt_model_choices,
+                    value=responder.current_gpt_model_choice,
+                    label="GPT Model",
+                )
+                specificity_scale = gr.Slider(
+                    value=responder.current_gpt_model_temp,
+                    label="D4 Scale: 0 more specific - 1 less specific",
+                    minimum=0,
+                    maximum=1,
+                    step=0.1
+                )
+
+                # Place the Generate Response button under the inputs
+                generate_button = gr.Button("Generate Response")
+
+            with gr.Column():
+                # Define output components for Column 2
+                sentiment_output = gr.Textbox(
+                    label="Sentiment:",
+                    placeholder="The sentiment of the email will show here..."
+                )
+                topics_output = gr.Textbox(
+                    label="Topics:",
+                    placeholder="Email topics will show here..."
+                )
+                response_output = gr.Textbox(
+                    label="Sample response:",
+                    placeholder="Generated response will show here..."
+                )
+                topic_311_details_output = gr.Textbox(
+                    label="311 Topic Specific Details",
+                    placeholder="Topic based 311 details will show here..."
+                )
+                fun_fact_output = gr.Textbox(
+                    label="Denver Fun Fact:",
+                    placeholder="Random Denver fun fact will show here..."
+                )
+                html_summary_output = gr.Textbox(
+                    label="Additional Denvergov.org Info",
+                    placeholder="Any additional Denvergov.org info will show here..."
+                )
+
+                # Thumbs up and thumbs down buttons
+                with gr.Row():
+                    thumbs_up = gr.Button("👍 Thumbs Up")
+                    thumbs_down = gr.Button("👎 Thumbs Down")
+
+                feedback_output = gr.Textbox(
+                    label="Feedback:",
+                    placeholder="Feedback on the response will show here...",
+                    interactive=False
+                )
+
+        # Display examples
+        gr.Examples(
+            examples=examples,
+            inputs=[email_input, prompt_template,
+                    gpt_model, specificity_scale],
+        )
+
+        # Connect generate button to responder function
+        generate_button.click(
+            fn=responder.generate_response,
+            inputs=[email_input, prompt_template,
+                    gpt_model, specificity_scale],
+            outputs=[sentiment_output, topics_output,
+                     response_output, topic_311_details_output,
+                     fun_fact_output, html_summary_output]
+        )
+
+        # Connect thumbs up and thumbs down buttons to feedback functions
+        thumbs_up.click(
+            fn=handle_thumbs_up,
+            inputs=[sentiment_output, topics_output, response_output],
+            outputs=feedback_output
+        )
+        thumbs_down.click(
+            fn=handle_thumbs_down,
+            inputs=[sentiment_output, topics_output, response_output],
+            outputs=feedback_output
+        )
+
     return email_app
 
 
