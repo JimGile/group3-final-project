@@ -33,8 +33,7 @@ This application is an AI-powered email responder designed to assist Denver City
     python app.py
 
 ## Additional Notebooks
-**load_vectorstore_docs.ipynb**
-Vector Store Loading Notebook (load_vectorstore_docs.ipynb)
+**load_vectorstore_docs.ipynb**<br>
 This notebook prepares email data specifically for integration into a vector database, enabling efficient search and retrieval of relevant information.
 
 Key Steps
@@ -48,14 +47,13 @@ Key Steps
 4. Vector Store Population:
 - Utilizes the Chroma database to store the vectorized data, making it accessible for rapid query-based retrieval.
 
-Prerequisites
+Prerequisites<br>
 LangChain and Chroma dependencies should be installed, along with an OpenAI API key configured in the environment.
 
-Running the Notebook
+Running the Notebook<br>
 Execute the notebook cells sequentially to preprocess, vectorize, and store emails into the Chroma vector database.
 
-**topic_modeling.ipynb**
-Topic Modeling Notebook (topic_modeling.ipynb)
+**topic_modeling.ipynb**<br>
 This notebook conducts topic modeling on constituent emails to identify recurring themes and key issues that constituents raise. By analyzing the content of emails, this model aids in understanding prevalent topics, helping to streamline responses and identify priority areas.
 
 Key Steps
@@ -70,13 +68,13 @@ Key Steps
 4. Result Visualization:
 - Visualizes topics and common words for each identified theme, providing insights into constituent concerns.
 
-Prerequisites
+Prerequisites<br>
 Scikit-Learn and SpaCy should be installed, with SpaCy’s English language model (en_core_web_sm) available.
 
-Running the Notebook
+Running the Notebook<br>
 Execute each cell sequentially to load data, preprocess text, perform topic modeling, and visualize results. The insights from this notebook can guide targeted responses and resource allocation for common community issues.
 
-**topic_modeling.ipynb**
+**topic_modeling.ipynb**<br>
 This notebook uses topic modeling techniques to analyze constituent emails, identifying common themes and areas of concern. It applies natural language processing to classify and group email content, aiding in understanding key topics for better engagement and resource allocation.
 
 Key Steps
@@ -91,13 +89,13 @@ Key Steps
 4. Topic Visualization:
 - Visualizes the identified topics and their top words, providing insights into community priorities.
 
-Prerequisites
+Prerequisites<br>
 Install Scikit-Learn and SpaCy with the en_core_web_sm language model for full functionality.
 
-Usage
+Usage<br>
 Run the notebook sequentially to load, process, and analyze email data, ultimately identifying and visualizing main topics to inform data-driven decision-making.
 
-**sample_rag_chain.ipynb**
+**sample_rag_chain.ipynb**<br>
 This notebook sets up a Retrieval-Augmented Generation (RAG) chain to answer questions using relevant context from a pre-built vector database. It’s designed to facilitate precise, context-aware responses to user queries, leveraging the power of language models and vector stores for enhanced information retrieval.
 
 Key Steps
@@ -113,11 +111,11 @@ Key Steps
 4. Prompt and Model Execution:
 - Executes the RAG chain by providing a question, retrieving relevant context from the vector store, and generating a concise answer.
 
-Prerequisites
+Prerequisites<br>
 LangChain, Chroma, and OpenAI API access are required.
 Ensure the Chroma vector store is pre-populated with relevant embeddings.
 
-Usage
+Usage<br>
 To run the notebook:
 - Load the cells sequentially, setting up environment variables and verifying vector store connectivity.
 - Input a query to see the RAG chain retrieve relevant context and generate a response.
